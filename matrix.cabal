@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: matrix
-version: 0.3.6.2
+version: 0.3.6.3
 author: Daniel Casanueva
 category: Math
 build-type: Simple
