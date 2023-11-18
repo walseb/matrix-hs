@@ -4,7 +4,7 @@ version: 0.3.6.2
 author: Daniel Casanueva
 category: Math
 build-type: Simple
-license: BSD-3-Clause
+license: MIT
 license-file: license
 maintainer: Daniel Casanueva (daniel.casanueva `at` proton.me)
 bug-reports: https://gitlab.com/daniel-casanueva/haskell/matrix/-/issues
