@@ -1,0 +1,2 @@
+include:
+  - remote: 'https://daniel-casanueva.gitlab.io/haskell-common/ci.yml'
