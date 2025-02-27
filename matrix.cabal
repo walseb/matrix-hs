@@ -1,13 +1,13 @@
 cabal-version: 3.0
 name: matrix
-version: 0.3.6.3
+version: 0.3.6.4
 author: Daniel Casanueva
 category: Math
 build-type: Simple
 license: MIT
 license-file: license
-maintainer: Daniel Casanueva (daniel.casanueva `at` proton.me)
-bug-reports: https://gitlab.com/daniel-casanueva/haskell/matrix/-/issues
+maintainer: Daniel Casanueva (coding `at` danielcasanueva.eu)
+bug-reports: https://codeberg.org/daniel-casanueva/matrix/issues
 synopsis: A native implementation of matrix operations.
 description:
   Matrix library. Basic operations and some algorithms.
