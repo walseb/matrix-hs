@@ -94,11 +94,11 @@ import qualified Data.Vector.Mutable     as MV
 
 encode :: Int -> (Int,Int) -> Int
 {-# INLINE encode #-}
-encode m (i,j) = (i-1)*m + j - 1
+encode m (i,j) = i*(m-1) + j
 
 decode :: Int -> Int -> (Int,Int)
 {-# INLINE decode #-}
-decode m k = (q+1,r+1)
+decode m k = (q,r)
  where
   (q,r) = quotRem k m
 
@@ -122,7 +122,7 @@ instance Eq a => Eq (Matrix a) where
     let r = nrows m1
         c = ncols m1
     in  and $ (r == nrows m2) : (c == ncols m2)
-            : [ m1 ! (i,j) == m2 ! (i,j) | i <- [1 .. r] , j <- [1 .. c] ]
+            : [ m1 ! (i,j) == m2 ! (i,j) | i <- [0 .. (r - 1)] , j <- [0 .. (c - 1)] ]
 
 -- | Just a cool way to output the size of a matrix.
 sizeStr :: Int -> Int -> String
@@ -133,7 +133,7 @@ prettyMatrix :: Show a => Matrix a -> String
 prettyMatrix m = concat
    [ "┌ ", unwords (replicate (ncols m) blank), " ┐\n"
    , unlines
-   [ "│ " ++ unwords (fmap (\j -> fill $ strings ! (i,j)) [1..ncols m]) ++ " │" | i <- [1..nrows m] ]
+   [ "│ " ++ unwords (fmap (\j -> fill $ strings ! (i,j)) [0..(ncols m - 1)]) ++ " │" | i <- [0..(nrows m - 1)] ]
    , "└ ", unwords (replicate (ncols m) blank), " ┘"
    ]
  where
@@ -204,7 +204,7 @@ instance Applicative Matrix where
 -- | Flatten a matrix of matrices. All sub matrices must have same dimensions
 --   This criteria is not checked.
 flatten:: Matrix (Matrix a) -> Matrix a
-flatten m = foldl1 (<->) $ map (foldl1 (<|>) . (\i -> getRow i m)) [1..(nrows m)]
+flatten m = foldl1 (<->) $ map (foldl1 (<|>) . (\i -> getRow i m)) [0..((nrows m) - 1)]
 
 -- | /O(rows*cols)/. Map a function over a row.
 --   Example:
@@ -299,8 +299,8 @@ matrix :: Int -- ^ Rows
 matrix n m f = M n m 0 0 m $ V.create $ do
   v <- MV.new $ n * m
   let en = encode m
-  numLoop 1 n $
-    \i -> numLoop 1 m $
+  numLoop 0 n $
+    \i -> numLoop 0 m $
     \j -> MV.unsafeWrite v (en (i,j)) (f (i,j))
   return v
 
@@ -322,7 +322,7 @@ identity n = matrix n n $ \(i,j) -> if i == j then 1 else 0
 diagonal :: a -- ^ Default element
          -> V.Vector a  -- ^ Diagonal vector
          -> Matrix a
-diagonal e v = matrix n n $ \(i,j) -> if i == j then V.unsafeIndex v (i - 1) else e
+diagonal e v = matrix n n $ \(i,j) -> if i == j then V.unsafeIndex v i else e
   where
     n = V.length v
 
@@ -357,7 +357,7 @@ fromList n m xs
 -- > toList ( 7 8 9 ) = [1,2,3,4,5,6,7,8,9]
 --
 toList :: Matrix a -> [a]
-toList m = [ unsafeGet i j m | i <- [1 .. nrows m] , j <- [1 .. ncols m] ]
+toList m = [ unsafeGet i j m | i <- [0 .. (nrows m - 1)] , j <- [0 .. (ncols m - 1)] ]
 
 -- | Get the elements of a matrix stored in a list of lists,
 --   where each list contains the elements of a single row.
@@ -367,7 +367,7 @@ toList m = [ unsafeGet i j m | i <- [1 .. nrows m] , j <- [1 .. ncols m] ]
 -- > toLists ( 7 8 9 ) = , [7,8,9] ]
 --
 toLists :: Matrix a -> [[a]]
-toLists m = [ [ unsafeGet i j m | j <- [1 .. ncols m] ] | i <- [1 .. nrows m] ]
+toLists m = [ [ unsafeGet i j m | j <- [0 .. (ncols m - 1)] ] | i <- [0 .. (nrows m - 1)] ]
 
 -- | Diagonal matrix from a non-empty list given the desired size.
 --   Non-diagonal elements will be filled with the given default element.
@@ -382,7 +382,7 @@ toLists m = [ [ unsafeGet i j m | j <- [1 .. ncols m] ] | i <- [1 .. nrows m] ]
 -- >   n ( 0 0 ... 0   n )
 --
 diagonalList :: Int -> a -> [a] -> Matrix a
-diagonalList n e xs = matrix n n $ \(i,j) -> if i == j then xs !! (i - 1) else e
+diagonalList n e xs = matrix n n $ \(i,j) -> if i == j then xs !! i else e
 
 -- | Create a matrix from a non-empty list of non-empty lists.
 --   /Each list must have at least as many elements as the first list/.
@@ -487,24 +487,24 @@ m !. (i,j) = unsafeGet i j m
 -- | Variant of 'getElem' that returns Maybe instead of an error.
 safeGet :: Int -> Int -> Matrix a -> Maybe a
 safeGet i j a@(M n m _ _ _ _)
- | i > n || j > m || i < 1 || j < 1 = Nothing
+ | i > (n - 1) || j > (m - 1) || i < 0 || j < 0 = Nothing
  | otherwise = Just $ unsafeGet i j a
 
 -- | Variant of 'setElem' that returns Maybe instead of an error.
-safeSet:: a -> (Int, Int) -> Matrix a -> Maybe (Matrix a)
+safeSet :: a -> (Int, Int) -> Matrix a -> Maybe (Matrix a)
 safeSet x p@(i,j) a@(M n m _ _ _ _)
-  | i > n || j > m || i < 1 || j < 1 = Nothing
+  | i > (n - 1) || j > (m - 1) || i < 0 || j < 0 = Nothing
   | otherwise = Just $ unsafeSet x p a
 
 -- | /O(1)/. Get a row of a matrix as a vector.
 getRow :: Int -> Matrix a -> V.Vector a
 {-# INLINE getRow #-}
-getRow i (M _ m ro co w v) = V.slice (w*(i-1+ro) + co) m v
+getRow i (M _ m ro co w v) = V.slice (w*(i+ro) + co) (m-1) v
 
 -- | Varian of 'getRow' that returns a maybe instead of an error
 safeGetRow :: Int -> Matrix a -> Maybe (V.Vector a)
 safeGetRow r m
-    | r > nrows m || r < 1 = Nothing
+    | r > ((nrows m) - 1) || r < 0 = Nothing
     | otherwise = Just $ getRow r m
 
 -- | /O(rows)/. Get a column of a matrix as a vector.
@@ -515,12 +515,12 @@ getCol j (M n _ ro co w v) = V.generate n $ \i -> v V.! encode w (i+1+ro,j+co)
 -- | Varian of 'getColumn' that returns a maybe instead of an error
 safeGetCol :: Int -> Matrix a -> Maybe (V.Vector a)
 safeGetCol c m
-    | c > ncols m || c < 1 = Nothing
+    | c > (ncols m - 1) || c < 0 = Nothing
     | otherwise = Just $ getCol c m
 
 -- | /O(min rows cols)/. Diagonal of a /not necessarily square/ matrix.
 getDiag :: Matrix a -> V.Vector a
-getDiag m = V.generate k $ \i -> m ! (i+1,i+1)
+getDiag m = V.generate k $ \i -> m ! (i,i)
  where
   k = min (nrows m) (ncols m)
 
@@ -677,7 +677,7 @@ setSize :: a   -- ^ Default element.
         -> Matrix a
 {-# INLINE setSize #-}
 setSize e n m a@(M n0 m0 _ _ _ _) = matrix n m $ \(i,j) ->
-  if i <= n0 && j <= m0
+  if i < (n0 - 1) && j < (m0 - 1)
      then unsafeGet i j a
      else e
 
@@ -699,10 +699,10 @@ submatrix :: Int    -- ^ Starting row
           -> Matrix a
 {-# INLINE submatrix #-}
 submatrix r1 r2 c1 c2 (M n m ro co w v)
-  | r1 < 1  || r1 > n = error $ "submatrix: starting row (" ++ show r1 ++ ") is out of range. Matrix has " ++ show n ++ " rows."
-  | c1 < 1  || c1 > m = error $ "submatrix: starting column (" ++ show c1 ++ ") is out of range. Matrix has " ++ show m ++ " columns."
-  | r2 < r1 || r2 > n = error $ "submatrix: ending row (" ++ show r2 ++ ") is out of range. Matrix has " ++ show n ++ " rows, and starting row is " ++ show r1 ++ "."
-  | c2 < c1 || c2 > m = error $ "submatrix: ending column (" ++ show c2 ++ ") is out of range. Matrix has " ++ show m ++ " columns, and starting column is " ++ show c1 ++ "."
+  | r1 < 0  || r1 > (n - 1) = error $ "submatrix: starting row (" ++ show r1 ++ ") is out of range. Matrix has " ++ show n ++ " rows."
+  | c1 < 0  || c1 > (m - 1) = error $ "submatrix: starting column (" ++ show c1 ++ ") is out of range. Matrix has " ++ show m ++ " columns."
+  | r2 < r1 || r2 > (n - 1) = error $ "submatrix: ending row (" ++ show r2 ++ ") is out of range. Matrix has " ++ show n ++ " rows, and starting row is " ++ show r1 ++ "."
+  | c2 < c1 || c2 > (m - 1) = error $ "submatrix: ending column (" ++ show c2 ++ ") is out of range. Matrix has " ++ show m ++ " columns, and starting column is " ++ show c1 ++ "."
   | otherwise = M (r2-r1+1) (c2-c1+1) (ro+r1-1) (co+c1-1) w v
 
 -- | /O(rows*cols)/. Remove a row and a column from a matrix.
@@ -768,13 +768,13 @@ joinBlocks (tl,tr,bl,br) =
   in  M n' m' 0 0 m' $ V.create $ do
         v <- MV.new (n'*m')
         let wr = MV.write v
-        numLoop 1 n  $ \i -> do
-          numLoop 1 m  $ \j -> wr (en (i ,j  )) $ tl ! (i,j)
-          numLoop 1 mr $ \j -> wr (en (i ,j+m)) $ tr ! (i,j)
-        numLoop 1 nb $ \i -> do
+        numLoop 0 (n - 1)  $ \i -> do
+          numLoop 0 (m - 1)  $ \j -> wr (en (i ,j  )) $ tl ! (i,j)
+          numLoop 0 (mr - 1) $ \j -> wr (en (i ,j+m)) $ tr ! (i,j)
+        numLoop 0 (nb - 1) $ \i -> do
           let i' = i+n
-          numLoop 1 m  $ \j -> wr (en (i',j  )) $ bl ! (i,j)
-          numLoop 1 mr $ \j -> wr (en (i',j+m)) $ br ! (i,j)
+          numLoop 0 (m - 1)  $ \j -> wr (en (i',j  )) $ bl ! (i,j)
+          numLoop 0 (mr - 1) $ \j -> wr (en (i',j+m)) $ br ! (i,j)
         return v
 
 {-# RULES
@@ -940,9 +940,9 @@ multStd__ :: Num a => Matrix a -> Matrix a -> Matrix a
 multStd__ a b = matrix r c $ \(i,j) -> dotProduct (V.unsafeIndex avs $ i - 1) (V.unsafeIndex bvs $ j - 1)
   where
     r = nrows a
-    avs = V.generate r $ \i -> getRow (i+1) a
+    avs = V.generate r $ \i -> getRow i a
     c = ncols b
-    bvs = V.generate c $ \i -> getCol (i+1) b
+    bvs = V.generate c $ \i -> getCol i b
 
 dotProduct :: Num a => V.Vector a -> V.Vector a -> a
 {-# INLINE dotProduct #-}
@@ -1011,31 +1011,30 @@ strassenMixed :: Num a => Matrix a -> Matrix a -> Matrix a
 {-# SPECIALIZE strassenMixed :: Matrix Rational -> Matrix Rational -> Matrix Rational #-}
 strassenMixed a b
  | r < strmixFactor = multStd__ a b
- | odd r = let r' = r + 1
-               a' = setSize 0 r' r' a
-               b' = setSize 0 r' r' b
-           in  submatrix 1 r 1 r $ strassenMixed a' b'
+ | odd r = let
+               a' = setSize 0 r r a
+               b' = setSize 0 r r b
+           in  submatrix 0 r 0 r $ strassenMixed a' b'
  | otherwise =
       M r r 0 0 r $ V.create $ do
          v <- MV.unsafeNew (r*r)
          let en = encode r
-             n' = n + 1
          -- c11 = p1 + p4 - p5 + p7
          sequence_ [ MV.write v k $
                          unsafeGet i j p1
                        + unsafeGet i j p4
                        - unsafeGet i j p5
                        + unsafeGet i j p7
-                   | i <- [1..n]
-                   , j <- [1..n]
+                   | i <- [0..(n-1)]
+                   , j <- [0..(n-1)]
                    , let k = en (i,j)
                      ]
          -- c12 = p3 + p5
          sequence_ [ MV.write v k $
                          unsafeGet i j' p3
                        + unsafeGet i j' p5
-                   | i <- [1..n]
-                   , j <- [n'..r]
+                   | i <- [0..(n-1)]
+                   , j <- [n..r]
                    , let k = en (i,j)
                    , let j' = j - n
                      ]
@@ -1043,8 +1042,8 @@ strassenMixed a b
          sequence_ [ MV.write v k $
                          unsafeGet i' j p2
                        + unsafeGet i' j p4
-                   | i <- [n'..r]
-                   , j <- [1..n]
+                   | i <- [n..r]
+                   , j <- [0..(n-1)]
                    , let k = en (i,j)
                    , let i' = i - n
                      ]
@@ -1054,15 +1053,15 @@ strassenMixed a b
                        - unsafeGet i' j' p2
                        + unsafeGet i' j' p3
                        + unsafeGet i' j' p6
-                   | i <- [n'..r]
-                   , j <- [n'..r]
+                   | i <- [n..r]
+                   , j <- [n..r]
                    , let k = en (i,j)
                    , let i' = i - n
                    , let j' = j - n
                      ]
          return v
  where
-  r = nrows a
+  r = (nrows a) - 1
   -- Size of the subproblem is halved.
   n = quot r 2
   -- Split of the original problem into smaller subproblems.
